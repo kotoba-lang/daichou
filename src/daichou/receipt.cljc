@@ -44,11 +44,20 @@
               :receipt/action-ref (h/sha256 (canonical/write action))
               :receipt/previous-hash (or previous-hash h/zero-hash)}]
     (assoc body :receipt/hash (h/sha256 (canonical/write body)))))
+;; 注: make が計算する hash は body(署名を含まない)に対するもので、
+;; recompute-hash の除外集合と一致している必要がある。ずれると「作った直後の
+;; 受領証が intact? を通らない」という形で必ず test に出る。
 
 (defn recompute-hash
-  "受領証の :receipt/hash を、その中身から計算し直す。"
+  "受領証の :receipt/hash を、その中身から計算し直す。
+
+   **:receipt/signature も除く。**署名はハッシュ*の上*にあるので、ハッシュ*の中*に
+   入れられない — 入れると、署名を足した瞬間にハッシュが変わり、その受領証は
+   自分自身と整合しなくなる(実際に最初の実装がそうなっており、test が掴んだ)。
+   同じ理由で、署名を後から差し替えても連鎖のハッシュは動かない。壊れた署名は
+   `signature-valid?` が落とす — 検出の担当を分けてある。"
   [receipt]
-  (h/sha256 (canonical/write (dissoc receipt :receipt/hash))))
+  (h/sha256 (canonical/write (dissoc receipt :receipt/hash :receipt/signature))))
 
 (defn intact?
   "この受領証1件が、書かれた内容と整合しているか。"
@@ -56,3 +65,40 @@
   (and (= (:receipt/hash receipt) (recompute-hash receipt))
        (= (:receipt/action-ref receipt)
           (h/sha256 (canonical/write (:receipt/action receipt))))))
+
+(defn sign
+  "受領証に署名を足す。
+
+   署名するのは `:receipt/hash` — それが行為・承認・前件ハッシュのすべてを覆って
+   いるので、連鎖上の位置ごと固定できる。
+
+   `signer` は `hex-message -> hex-signature` の関数。**鍵はここに来ない** —
+   呼び出し側(kagi 経路)が閉じ込めたまま署名だけを返す。`by` は署名した主体の
+   識別子で、`:approval/by`(承認した主体)とは**別物**。fleet が書き、governor が
+   承認する構成では両者は一致しない。"
+  [receipt {:keys [signer by public-key]}]
+  (when-not (:receipt/hash receipt)
+    (throw (ex-info "ハッシュの無い受領証には署名できない" {})))
+  (when-not (and (fn? signer) (string? by) (string? public-key))
+    (throw (ex-info "signer(関数) / by(署名主体) / public-key が要る" {:by by})))
+  (assoc receipt :receipt/signature
+         {:signature/alg :ed25519
+          :signature/by by
+          :signature/public-key public-key
+          :signature/value (signer (:receipt/hash receipt))}))
+
+;; **intact? と signature-valid? は担当が違う。**署名は :receipt/hash に対する
+;; ものなので、本文だけ書き換えられた受領証では署名は当たったままになる(捕まえるのは
+;; intact?)。逆に本文とハッシュを両方書き換えられた受領証は intact? を通るが、
+;; 新しいハッシュに対する署名を持たないので signature-valid? が落とす。
+;; **どちらか一方だけを見て「無事」と判断すると、対応する側の改ざんを見逃す。**
+;; chain/verify が両方を順に見るのはこのため。
+(defn signature-valid?
+  "署名がこの受領証のハッシュに対して正しいか。`verifier` は
+   `[public-key message signature] -> bool`。署名が無い受領証は false ではなく
+   nil を返す — 『署名が無い』と『署名が壊れている』を混ぜない。"
+  [receipt verifier]
+  (when-let [s (:receipt/signature receipt)]
+    (boolean (verifier (:signature/public-key s)
+                       (:receipt/hash receipt)
+                       (:signature/value s)))))

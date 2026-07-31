@@ -33,6 +33,48 @@
 ;; => {:ok? false :length 3 :broken-at 1 :reason :receipt-altered}
 ```
 
+## 署名
+
+Ed25519（RFC 8032）。**決定的**なので、同じ鍵と同じ入力なら常に同じ署名になり、
+**nbb と JVM が同じ値を計算することを test で証明できる**（乱数を使う方式ではこれができない）。
+実装は RFC 8032 の公開テストベクタと一致することを検査している — 自分の実装と自分の
+検証器が噛み合うだけの test は、両方が同じように間違っていても緑になるため。
+
+```clojure
+(-> receipt
+    (receipt/sign {:signer      (fn [msg] ...)   ; 鍵はここに来ない
+                   :by          "fleet-writer"   ; 署名した主体
+                   :public-key  "d75a98…"}))
+(chain/verify c {:verifier (fn [pk msg sig] ...)})
+;; => {:ok? true :length 2 :signatures-checked? true}
+```
+
+**`verifier` を渡さなければ署名は見ない。** その場合 `:signatures-checked? false` が返る —
+見ていないものを「通った」と報告しないため。逆に verifier を渡した台帳に無署名の行が
+あれば `:reason :unsigned` で落ちる（署名を検証すると決めた台帳に無署名の行があるのは、
+検証していないのと同じ）。
+
+### 3層で縛っていて、どれも単独では足りない
+
+| 層 | 何を縛るか | これだけを見ると見逃すもの |
+|---|---|---|
+| `:receipt/action-ref` | 行為 | 承認の差し替え |
+| `:receipt/hash` | 行為 + 承認 + 時刻 + action-ref + 前件ハッシュ | 台帳ごとの作り直し |
+| `:receipt/signature` | 上のハッシュ | （鍵が漏れた場合） |
+
+- 本文だけ書き換える → `action-ref` と `hash` が合わなくなる（**署名は当たったままなので、署名だけを見ると見逃す**）
+- 本文と `action-ref` と `hash` を全部作り直す → 内部は完全に整合し `intact?` は通る。**ここで唯一残る歯止めが署名**
+- 署名は `:receipt/hash` の**外**にある（中に入れると、署名を足した瞬間にハッシュが変わって自分自身と整合しなくなる — 最初の実装がそうなっており test が掴んだ）
+
+**署名した主体（`:signature/by`）と承認した主体（`:approval/by`）は別物として残る。** fleet が書き、governor が承認する構成では一致しない。
+
+### 鍵はこの層に来ない
+
+`signer` は `hex-message -> hex-signature` の関数で、鍵は呼び出し側（**kagi**）が閉じ込めたまま署名だけを返す。第二の keyring を作らないため（ADR-2607310300 D6）。JVM では seed からの公開鍵導出も行わない — 鍵ペアを持っているのは kagi で、必要なら `kotoba-lang/ed25519`（pure Clojure、seed → 公開鍵/did:key）を呼び出し側で使う。
+
+なお PQC 側（ML-DSA-65）はここでは重ねない。kagi が Ed25519 + ML-DSA-65 の hybrid を
+持っているので、対量子が要る場面はそちらの責務。
+
 ## 設計上、意図的に狭くしてあるところ
 
 - **浮動小数を受け付けない。** ClojureScript では `1` と `1.0` が同じ値なので、「整数と小数を区別する」正規化は JVM でしか成り立たない。**両 runtime で同じ連鎖にならない台帳は、台帳として無いのと同じ**（nbb で作った受領証を JVM の検証器に出せない）。金額や計測値は文字列か整数（最小単位）で入れる。これは実装後に**両 runtime で走らせて見つけた**欠陥で、区別する代わりに受け付けないことにした。

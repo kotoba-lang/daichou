@@ -31,7 +31,7 @@
               (chain/append {:action (act "a") :approval approval :at "2026-07-31T00:00:01Z"})
               (chain/append {:action (act "b") :approval approval :at "2026-07-31T00:00:02Z"})
               (chain/append {:action (act "c") :approval approval :at "2026-07-31T00:00:03Z"}))]
-    (is (= {:ok? true :length 3} (chain/verify c)))
+    (is (= {:ok? true :length 3 :signatures-checked? false} (chain/verify c)))
     (testing "先頭は 0 詰めで始まる"
       (is (= h/zero-hash (:receipt/previous-hash (first c)))))
     (testing "中身を書き換えると、**その位置**が出る — 壊れた事実だけでは運用で使えない"
