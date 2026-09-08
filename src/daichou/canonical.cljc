@@ -17,7 +17,7 @@
      表現に苦しんでいる問題を、受け付けないことで避ける判断である。
    - nil は `null`、真偽値はそのまま。
    - 文字列は JSON と同じ最小エスケープ。"
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (defn- esc [s]
   (str "\"" (-> (str s)
