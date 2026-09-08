@@ -11,7 +11,7 @@
 
    **鍵はここで取りに行かない。**seed / 公開鍵は呼び出し側が渡す(kagi 経路)。
    第二の keyring を作らないための境界。"
-  (:require [clojure.string :as str])
+  (:require [kotoba.lang.text :as str])
   #?(:clj (:import [java.security KeyFactory Signature]
                    [java.security.spec PKCS8EncodedKeySpec X509EncodedKeySpec])))
 
