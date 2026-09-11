@@ -84,7 +84,7 @@ Ed25519（RFC 8032）。**決定的**なので、同じ鍵と同じ入力なら�
 
 ## runtime
 
-第一の実行経路は **nbb / ClojureScript**、JVM は互換スイート用（CLAUDE.md の runtime 優先順位）。`test/daichou/chain_test.cljc` は**両方で走らせる前提**で、その中の golden hash が「片方で作った連鎖がもう片方で検証できる」ことを固定している。
+第一の実行経路は **nbb / ClojureScript**、JVM は互換スイート用（CLAUDE.md の runtime 優先順位）。`test/daichou/chain_test.cljk` は**両方で走らせる前提**で、その中の golden hash が「片方で作った連鎖がもう片方で検証できる」ことを固定している。
 
 ```bash
 nbb --classpath "src:test" -e '(require (quote [clojure.test :as t]) (quote daichou.chain-test)) (t/run-tests (quote daichou.chain-test))'
