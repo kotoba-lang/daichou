@@ -1,5 +1,5 @@
 (ns daichou.chain-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [daichou.chain :as chain]
             [daichou.receipt :as receipt]
             [daichou.canonical :as canonical]
