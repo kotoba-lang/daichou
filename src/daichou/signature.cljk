@@ -11,7 +11,7 @@
 
    **鍵はここで取りに行かない。**seed / 公開鍵は呼び出し側が渡す(kagi 経路)。
    第二の keyring を作らないための境界。"
-  (:require [kotoba.lang.text :as str])
+  (:require [kotoba.bytes :as kbytes] [kotoba.lang.text :as str])
   #?(:clj (:import [java.security KeyFactory Signature]
                    [java.security.spec PKCS8EncodedKeySpec X509EncodedKeySpec])))
 
@@ -45,7 +45,7 @@
            pk   (.generatePrivate (KeyFactory/getInstance "Ed25519") spec)
            sig  (Signature/getInstance "Ed25519")]
        (.initSign sig pk)
-       (.update sig (.getBytes message "UTF-8"))
+       (.update sig (kbytes/utf8-bytes message))
        (bytes->hex (.sign sig)))
      :cljs
      (let [der (js/Buffer.from (str pkcs8-prefix seed-hex) "hex")
@@ -83,7 +83,7 @@
            pk   (.generatePublic (KeyFactory/getInstance "Ed25519") spec)
            sig  (Signature/getInstance "Ed25519")]
        (.initVerify sig pk)
-       (.update sig (.getBytes message "UTF-8"))
+       (.update sig (kbytes/utf8-bytes message))
        (.verify sig (hex->bytes signature-hex)))
      :cljs
      (let [der (js/Buffer.from (str spki-prefix public-key-hex) "hex")
